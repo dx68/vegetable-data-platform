@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>基于HDFS+Hive+Spark的全国蔬菜产业智能分析平台</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{background:#06091a;color:#fff;font-family:'Microsoft YaHei','PingFang SC',sans-serif;height:100vh;overflow:hidden;display:flex;}
+        .bg-particles{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:hidden;}
+        .bg-particles span{position:absolute;display:block;width:3px;height:3px;background:rgba(64,158,255,0.25);border-radius:50%;animation:float-up linear infinite;}
+        @keyframes float-up{0%{transform:translateY(100vh) scale(0);opacity:0;}20%{opacity:1;}100%{transform:translateY(-10vh) scale(1);opacity:0;}}
+        .sidebar{position:relative;z-index:10;width:220px;min-width:220px;height:100vh;background:rgba(8,12,32,0.95);border-right:1px solid rgba(64,158,255,0.12);display:flex;flex-direction:column;backdrop-filter:blur(12px);}
+        .sidebar-logo{padding:28px 20px 20px;text-align:center;border-bottom:1px solid rgba(64,158,255,0.1);}
+        .sidebar-logo h2{font-size:16px;font-weight:700;letter-spacing:3px;line-height:1.6;background:linear-gradient(90deg,#409eff,#67c23a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+        .sidebar-logo .sub{font-size:10px;color:#4a5a7a;margin-top:6px;letter-spacing:1px;}
+        .nav-list{flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px;}
+        .nav-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;cursor:pointer;transition:all .25s;color:#6a7a9a;font-size:13px;font-weight:500;position:relative;border:1px solid transparent;}
+        .nav-item:hover{background:rgba(64,158,255,0.06);color:#a0b8e0;border-color:rgba(64,158,255,0.1);}
+        .nav-item.active{background:rgba(64,158,255,0.1);color:#409eff;font-weight:600;border-color:rgba(64,158,255,0.25);box-shadow:0 0 20px rgba(64,158,255,0.08);}
+        .nav-item.active::before{content:'';position:absolute;left:0;top:20%;bottom:20%;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,#409eff,#67c23a);box-shadow:0 0 8px rgba(64,158,255,0.5);}
+        .nav-item .icon{font-size:18px;width:24px;text-align:center;}
+        .nav-item .text{flex:1;}
+        .nav-item .badge{font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(64,158,255,0.15);color:#409eff;font-weight:600;}
+        .sidebar-footer{padding:16px 20px;border-top:1px solid rgba(64,158,255,0.08);text-align:center;font-size:10px;color:#3a4a6a;letter-spacing:.5px;line-height:1.6;}
+        .main{flex:1;height:100vh;overflow-y:auto;position:relative;z-index:1;}
+        .main::-webkit-scrollbar{width:6px;}.main::-webkit-scrollbar-track{background:transparent;}.main::-webkit-scrollbar-thumb{background:rgba(64,158,255,0.15);border-radius:3px;}
+        .topbar{padding:16px 28px 12px;border-bottom:1px solid rgba(64,158,255,0.08);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+        .topbar h1{font-size:18px;font-weight:700;letter-spacing:3px;background:linear-gradient(90deg,#409eff 0%,#67c23a 50%,#e6a23c 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shine 4s linear infinite;white-space:nowrap;}
+        @keyframes shine{to{background-position:200% center;}}
+        .search-box{display:flex;align-items:center;gap:6px;}
+        .search-box select,.search-box input{background:rgba(13,17,48,0.8);border:1px solid rgba(64,158,255,0.2);color:#ccc;border-radius:8px;padding:6px 10px;font-size:12px;outline:none;transition:border .2s;}
+        .search-box select:focus,.search-box input:focus{border-color:#409eff;}
+        .search-box input{width:150px;}
+        .search-box button{background:linear-gradient(135deg,#409eff,#67c23a);border:none;color:#fff;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600;transition:opacity .2s;}
+        .search-box button:hover{opacity:0.85;}
+        .page{display:none;padding:16px 28px 24px;}.page.active{display:block;animation:fadeIn .4s ease;}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+        .stats-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+        .stat-card{position:relative;background:rgba(13,17,48,0.6);backdrop-filter:blur(10px);border:1px solid rgba(64,158,255,0.15);border-radius:14px;padding:14px 20px 10px;text-align:center;flex:1;min-width:110px;transition:all .35s;}
+        .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0;background:linear-gradient(90deg,var(--accent,#409eff),transparent);}
+        .stat-card:nth-child(1){--accent:#409eff;}.stat-card:nth-child(2){--accent:#67c23a;}.stat-card:nth-child(3){--accent:#e6a23c;}.stat-card:nth-child(4){--accent:#f56c6c;}.stat-card:nth-child(5){--accent:#9b59b6;}.stat-card:nth-child(6){--accent:#00d2d3;}
+        .stat-card:hover{transform:translateY(-3px);border-color:rgba(64,158,255,0.4);box-shadow:0 8px 32px rgba(64,158,255,0.12);}
+        .stat-card .icon{font-size:16px;margin-bottom:3px;}
+        .stat-card .num{font-size:22px;font-weight:800;color:var(--accent,#409eff);font-variant-numeric:tabular-nums;}
+        .stat-card .label{font-size:10px;color:#6a7a9a;margin-top:2px;letter-spacing:1px;}
+        .freshness{font-size:10px;color:#4a5a7a;margin-top:2px;}
+        .freshness em{font-style:normal;color:#67c23a;}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+        .grid.single{grid-template-columns:1fr;}
+        .chart-panel{background:rgba(10,14,38,0.7);backdrop-filter:blur(8px);border:1px solid rgba(64,158,255,0.12);border-radius:14px;padding:12px 14px 8px;transition:all .3s;}
+        .chart-panel:hover{border-color:rgba(64,158,255,0.3);box-shadow:0 4px 24px rgba(64,158,255,0.06);}
+        .chart-panel .title{font-size:13px;font-weight:600;color:#a0b0cc;border-left:3px solid #409eff;padding-left:10px;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+        .chart-panel .title .dot{width:6px;height:6px;border-radius:50%;background:#409eff;box-shadow:0 0 8px #409eff;}
+        .chart-panel .hint{font-size:10px;color:#4a5a7a;margin-left:8px;font-weight:400;}
+        .chart-box{width:100%;height:340px;}.chart-box-sm{width:100%;height:280px;}.chart-box-lg{width:100%;height:480px;}.chart-box-xl{width:100%;height:600px;}
+        .full-width{grid-column:1/-1;}
+        /* 筛选栏 */
+        .filter-bar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
+        .filter-bar label{font-size:11px;color:#6a7a9a;}
+        .filter-bar select,.filter-bar input[type=date]{background:rgba(13,17,48,0.8);border:1px solid rgba(64,158,255,0.2);color:#ccc;border-radius:6px;padding:5px 10px;font-size:11px;outline:none;}
+        .filter-bar select:focus,.filter-bar input[type=date]:focus{border-color:#409eff;}
+        /* 日期输入全局深色适配（flatpickr） */
+        .date-input{background:rgba(13,17,48,0.9);border:1px solid rgba(64,158,255,0.25);color:#ddd;border-radius:6px;padding:5px 10px;font-size:12px;outline:none;min-width:130px;height:30px;cursor:pointer;font-family:monospace;}
+        .date-input:focus{border-color:#409eff;box-shadow:0 0 8px rgba(64,158,255,0.15);}
+        .date-input::placeholder{color:#4a5a7a;}
+        .flatpickr-calendar{background:rgba(13,17,48,0.98)!important;border:1px solid rgba(64,158,255,0.3)!important;box-shadow:0 8px 32px rgba(0,0,0,0.6)!important;border-radius:10px!important;font-size:13px!important;}
+        .flatpickr-day{color:#c0c8e0!important;border-radius:6px!important;}
+        .flatpickr-day:hover{background:rgba(64,158,255,0.25)!important;border-color:transparent!important;}
+        .flatpickr-day.selected{background:#409eff!important;border-color:#409eff!important;color:#fff!important;}
+        .flatpickr-day.today{border-color:#67c23a!important;}
+        .flatpickr-months .flatpickr-month{background:transparent!important;color:#a0b0cc!important;}
+        .flatpickr-current-month .flatpickr-monthDropdown-months{background:rgba(13,17,48,0.9)!important;color:#a0b0cc!important;}
+        .flatpickr-current-month input.cur-year{color:#a0b0cc!important;}
+        .flatpickr-weekdays{background:transparent!important;}
+        span.flatpickr-weekday{color:#5a6a8a!important;font-weight:600!important;}
+        .flatpickr-months .flatpickr-prev-month,.flatpickr-months .flatpickr-next-month{color:#a0b0cc!important;fill:#a0b0cc!important;}
+        .flatpickr-months .flatpickr-prev-month:hover,.flatpickr-months .flatpickr-next-month:hover{color:#409eff!important;fill:#409eff!important;}
+        .filter-bar .btn-sm{background:rgba(64,158,255,0.15);border:1px solid rgba(64,158,255,0.25);color:#a0b8e0;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;transition:all .2s;}
+        .filter-bar .btn-sm:hover{background:rgba(64,158,255,0.3);}
+        /* 省份对比表格 */
+        .compare-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+        .compare-bar select{background:rgba(13,17,48,0.8);border:1px solid rgba(64,158,255,0.2);color:#ccc;border-radius:6px;padding:5px 10px;font-size:11px;outline:none;}
+        .compare-bar button{background:rgba(103,194,58,0.2);border:1px solid rgba(103,194,58,0.3);color:#67c23a;border-radius:6px;padding:5px 14px;font-size:11px;cursor:pointer;font-weight:600;}
+        .compare-bar button:hover{background:rgba(103,194,58,0.35);}
+        .compare-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;}
+        .compare-table th{text-align:left;padding:8px 12px;color:#6a7a9a;font-weight:600;border-bottom:1px solid rgba(64,158,255,0.12);}
+        .compare-table td{padding:8px 12px;color:#a0b0cc;border-bottom:1px solid rgba(64,158,255,0.06);}
+        .compare-table td.num-cell{color:#e6a23c;font-weight:600;text-align:right;}
+        /* 弹窗 */
+        .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:100;justify-content:center;align-items:center;backdrop-filter:blur(3px);}
+        .modal-overlay.show{display:flex;}
+        .modal{background:#0d1230;border:1px solid rgba(64,158,255,0.25);border-radius:16px;width:92%;max-width:920px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.5);animation:modalIn .3s ease;}
+        @keyframes modalIn{from{opacity:0;transform:scale(0.95);}to{opacity:1;transform:scale(1);}}
+        .modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(64,158,255,0.12);}
+        .modal-header h3{font-size:15px;color:#a0b8e0;font-weight:600;}
+        .breadcrumb{display:flex;gap:6px;align-items:center;margin-top:4px;}
+        .breadcrumb span{font-size:10px;color:#4a5a7a;padding:2px 8px;background:rgba(64,158,255,0.08);border-radius:4px;}
+        .breadcrumb span.val{color:#67c23a;background:rgba(103,194,58,0.1);}
+        .modal-close{background:none;border:none;color:#6a7a9a;font-size:24px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all .2s;}
+        .modal-close:hover{color:#fff;background:rgba(255,255,255,0.1);}
+        .modal-body{flex:1;overflow-y:auto;padding:12px 20px;}
+        .modal-body::-webkit-scrollbar{width:5px;}.modal-body::-webkit-scrollbar-thumb{background:rgba(64,158,255,0.2);border-radius:3px;}
+        .modal-toolbar{display:flex;align-items:center;justify-content:space-between;padding:8px 20px;border-bottom:1px solid rgba(64,158,255,0.06);}
+        .modal-toolbar .btn-export{background:rgba(103,194,58,0.15);border:1px solid rgba(103,194,58,0.3);color:#67c23a;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:500;transition:all .2s;text-decoration:none;display:inline-flex;align-items:center;gap:4px;}
+        .modal-toolbar .btn-export:hover{background:rgba(103,194,58,0.3);}
+        .modal-toolbar .result-count{font-size:11px;color:#6a7a9a;}
+        .modal-footer{padding:10px 20px;border-top:1px solid rgba(64,158,255,0.08);display:flex;align-items:center;justify-content:space-between;}
+        .modal-footer .page-info{font-size:11px;color:#6a7a9a;}
+        .modal-footer button{background:rgba(64,158,255,0.15);border:1px solid rgba(64,158,255,0.25);color:#a0b8e0;border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;transition:all .2s;}
+        .modal-footer button:hover:not(:disabled){background:rgba(64,158,255,0.3);}
+        .modal-footer button:disabled{opacity:0.4;cursor:default;}
+        .data-table{width:100%;border-collapse:collapse;font-size:12px;}
+        .data-table th{text-align:left;padding:8px 10px;color:#6a7a9a;font-weight:600;border-bottom:1px solid rgba(64,158,255,0.12);position:sticky;top:0;background:#0d1230;z-index:1;}
+        .data-table td{padding:8px 10px;color:#a0b0cc;border-bottom:1px solid rgba(64,158,255,0.06);}
+        .data-table tr:hover td{background:rgba(64,158,255,0.04);}
+        .data-table a{color:#409eff;text-decoration:none;}.data-table a:hover{color:#67c23a;text-decoration:underline;}
+        .data-table .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;background:rgba(64,158,255,0.1);color:#409eff;}
+        .data-table .num-cell{color:#e6a23c;font-weight:600;font-variant-numeric:tabular-nums;}
+        .loading-row{text-align:center;padding:40px;color:#5a6a8a;}
+        /* 全局 Loading */
+        #global-loading{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(6,9,26,0.95);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;transition:opacity .5s;}
+        #global-loading.hidden{opacity:0;pointer-events:none;}
+        #global-loading .spinner{width:40px;height:40px;border:3px solid rgba(64,158,255,0.2);border-top-color:#409eff;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        /* 热力矩阵表格 */
+        .heatmap-table{border-collapse:collapse;font-size:11px;width:max-content;min-width:100%;}
+        .heatmap-table th,.heatmap-table td{padding:4px 8px;text-align:center;border:1px solid rgba(64,158,255,0.08);white-space:nowrap;}
+        .heatmap-table th{color:#a0b0cc;font-weight:600;position:sticky;top:0;background:#0a0e26;z-index:2;}
+        .heatmap-table td.prov-header{color:#8899bb;font-weight:500;position:sticky;left:0;background:#0a0e26;z-index:1;}
+        .heatmap-table td.veg-header{color:#a0b0cc;font-weight:600;text-align:left;position:sticky;left:0;background:#0a0e26;z-index:3;min-width:60px;}
+        .heatmap-cell{color:#fff;font-weight:600;font-size:10px;border-radius:3px;min-width:42px;}
+        /* 刷新指示器 */
+        .refresh-bar{display:flex;align-items:center;gap:8px;font-size:11px;color:#4a5a7a;}
+        .refresh-bar .dot-live{width:6px;height:6px;border-radius:50%;background:#67c23a;animation:pulse-live 2s infinite;}
+        @keyframes pulse-live{0%,100%{opacity:1;}50%{opacity:0.3;}}
+        .refresh-bar .btn-refresh{background:rgba(64,158,255,0.12);border:1px solid rgba(64,158,255,0.2);color:#8899bb;border-radius:6px;padding:3px 10px;font-size:10px;cursor:pointer;transition:all .2s;}
+        .refresh-bar .btn-refresh:hover{background:rgba(64,158,255,0.25);color:#fff;}
+        .refresh-bar .btn-refresh.loading{opacity:0.5;pointer-events:none;}
+        /* 对比选择栏 */
+        .var-compare-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;}
+        .var-compare-bar select{background:rgba(13,17,48,0.8);border:1px solid rgba(64,158,255,0.2);color:#ccc;border-radius:6px;padding:5px 10px;font-size:11px;outline:none;min-width:90px;}
+        .var-compare-bar button{background:rgba(64,158,255,0.2);border:1px solid rgba(64,158,255,0.3);color:#409eff;border-radius:6px;padding:5px 14px;font-size:11px;cursor:pointer;font-weight:600;}
+        .var-compare-bar button:hover{background:rgba(64,158,255,0.35);}
+        .var-compare-bar label{font-size:11px;color:#6a7a9a;}
+        /* 导出按钮 */
+        .export-btn{font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(103,194,58,0.12);border:1px solid rgba(103,194,58,0.25);color:#67c23a;cursor:pointer;margin-left:auto;transition:all .2s;text-decoration:none;}
+        .export-btn:hover{background:rgba(103,194,58,0.25);}
+        /* 移动端适配 */
+        @media(max-width:768px){
+            body{height:auto;overflow:auto;flex-direction:column;}
+            .sidebar{position:fixed;bottom:0;left:0;width:100%;height:56px;flex-direction:row;border-right:none;border-top:1px solid rgba(64,158,255,0.12);z-index:100;}
+            .sidebar-logo,.sidebar-footer{display:none;}
+            .nav-list{flex-direction:row;padding:4px 8px;gap:2px;overflow-x:auto;}
+            .nav-item{padding:8px 12px;border-radius:8px;flex-direction:column;gap:2px;font-size:10px;}
+            .nav-item .icon{font-size:16px;}
+            .main{height:auto;min-height:calc(100vh - 56px);padding-bottom:60px;}
+            .topbar{flex-direction:column;align-items:flex-start;}
+            .stats-row{flex-wrap:wrap;}
+            .stat-card{min-width:calc(50% - 8px);}
+            .grid{grid-template-columns:1fr;}
+        }
+        @media(max-width:1100px){.sidebar{width:64px;min-width:64px;}.sidebar-logo h2,.sidebar-logo .sub,.nav-item .text,.nav-item .badge,.sidebar-footer{display:none;}.nav-item{justify-content:center;padding:14px;}.nav-item .icon{margin:0;}.grid{grid-template-columns:1fr;}}
+    </style>
+</head>
+<body>
+<!-- 全局 Loading 遮罩 -->
+<div id="global-loading">
+    <div class="spinner"></div>
+    <div style="font-size:18px;color:#409eff;margin-bottom:8px;">数据加载中...</div>
+    <div style="font-size:11px;color:#6a7a9a;">首次加载约需 10-20 秒，请稍候</div>
+</div>
+<div class="bg-particles" id="particles"></div>
+<nav class="sidebar">
+    <div class="sidebar-logo"><h2>蔬菜产业<br/>全景分析</h2><div class="sub">VEGETABLE INDUSTRY</div></div>
+    <div class="nav-list">
+        <div class="nav-item active" data-page="overview" onclick="switchPage('overview')"><span class="icon">📊</span><span class="text">数据总览</span><span class="badge">6项</span></div>
+        <div class="nav-item" data-page="supply" onclick="switchPage('supply')"><span class="icon">🌱</span><span class="text">种子与供应商</span><span class="badge">5项</span></div>
+        <div class="nav-item" data-page="price" onclick="switchPage('price')"><span class="icon">💰</span><span class="text">价格深度分析</span><span class="badge">4项</span></div>
+        <div class="nav-item" data-page="compare" onclick="switchPage('compare')"><span class="icon">🏆</span><span class="text">综合对比</span><span class="badge">5项</span></div>
+                <div class="nav-item" data-page="bigdata" onclick="switchPage('bigdata')"><span class="icon">🧠</span><span class="text">大数据深度分析</span><span class="badge">3项</span></div>
+                
+    </div>
+    <div class="sidebar-footer">数据来源：中国蔬菜网<br/>&copy; 2026</div>
+</nav>
+<div class="main">
+    <div class="topbar">
+        <h1>基于HDFS+Hive+Spark的全国蔬菜产业智能分析平台</h1>
+        <div class="search-box">
+            <select id="search-type"><option value="seeds">种子</option><option value="suppliers">供应商</option></select>
+            <input id="search-keyword" type="text" placeholder="输入产品/企业名称..."/>
+            <button onclick="doSearch()">🔍 搜索</button>
+        </div>
+        <div class="refresh-bar">
+            <button class="btn-refresh" id="btn-manual-refresh" onclick="manualRefresh()">↻ 刷新数据</button>
+        </div>
+    </div>
+    <!-- 页面1: 数据总览 -->
+    <div class="page active" id="page-overview">
+        <div class="stats-row">
+            <div class="stat-card"><div class="icon">📊</div><div class="num" id="s-price">-</div><div class="label">价格数据(条)</div><div class="freshness" id="f-price"></div></div>
+            <div class="stat-card"><div class="icon">🌱</div><div class="num" id="s-seed">-</div><div class="label">种子数据(条)</div><div class="freshness" id="f-seed"></div></div>
+            <div class="stat-card"><div class="icon">🏭</div><div class="num" id="s-supplier">-</div><div class="label">供应商(条)</div><div class="freshness" id="f-supplier"></div></div>
+            <div class="stat-card"><div class="icon">🥬</div><div class="num" id="s-types">-</div><div class="label">蔬菜品种</div></div>
+            <div class="stat-card"><div class="icon">🗺️</div><div class="num" id="s-provinces">-</div><div class="label">覆盖省份</div></div>
+            <div class="stat-card"><div class="icon">🏪</div><div class="num" id="s-markets">-</div><div class="label">批发市场</div></div>
+        </div>
+        <div class="grid">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>各省份蔬菜平均批发价格地图<span class="hint">点击省份查看种子明细</span></div><div id="map-price" class="chart-box"></div></div>
+            <div class="chart-panel"><div class="title"><span class="dot"></span>蔬菜品种平均价格 Top 20（元/斤）</div><div id="bar-price-veg" class="chart-box"></div></div>
+        </div>
+        <!-- 省份对比 -->
+        <div class="chart-panel" style="margin-top:0;">
+            <div class="title"><span class="dot"></span>省份综合对比</div>
+            <div class="compare-bar">
+                <label style="font-size:11px;color:#6a7a9a;">选择省份（最多5个）：</label>
+                <select id="cmp-p1"><option value="">--</option></select>
+                <select id="cmp-p2"><option value="">--</option></select>
+                <select id="cmp-p3"><option value="">--</option></select>
+                <select id="cmp-p4"><option value="">--</option></select>
+                <select id="cmp-p5"><option value="">--</option></select>
+                <button onclick="doCompare()">对比分析</button>
+            </div>
+            <div id="compare-result"></div>
+        </div>
+    </div>
+    <!-- 页面2: 种子与供应商 -->
+    <div class="page" id="page-supply">
+        <div class="grid">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>种子供应省份分布 Top 15<span class="hint">点击柱形查看明细</span></div><div id="bar-seed-prov" class="chart-box-sm"></div></div>
+            <div class="chart-panel"><div class="title"><span class="dot"></span>供应商省份分布 Top 15<span class="hint">点击柱形查看明细</span></div><div id="bar-supplier-prov" class="chart-box-sm"></div></div>
+        </div>
+        <div class="grid">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>种子品种分布 Top 15</div><div id="bar-seed-cat" class="chart-box-sm"></div></div>
+            <div class="chart-panel"><div class="title"><span class="dot"></span>供应商品种分布 Top 15</div><div id="bar-sup-cat" class="chart-box-sm"></div></div>
+        </div>
+        <div class="grid single">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>供应商企业类型分布<span class="hint">点击扇区查看明细</span></div><div id="pie-supplier-type" class="chart-box"></div></div>
+        </div>
+    </div>
+    <!-- 页面3: 价格深度分析 -->
+    <div class="page" id="page-price">
+        <div class="chart-panel" style="margin-bottom:14px;">
+            <div class="title"><span class="dot"></span>蔬菜平均价格走势</div>
+            <div class="filter-bar">
+                <label>品种：</label>
+                <select id="trend-veg"><option value="">全部品种</option></select>
+                <label>起始：</label><input type="text" class="date-input" id="trend-from" placeholder="YYYY-MM-DD"/>
+                <label>结束：</label><input type="text" class="date-input" id="trend-to" placeholder="YYYY-MM-DD"/>
+                <button class="btn-sm" onclick="refreshTrend()">刷新</button>
+            </div>
+            <div id="line-trend" class="chart-box"></div>
+        </div>
+        <div class="grid">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>价格波动排行 Top 15（变异系数）<a class="export-btn" href="/api/export/csv?type=prices" target="_blank">导出 CSV</a></div><div id="bar-volatility" class="chart-box-sm"></div></div>
+            <div class="chart-panel"><div class="title"><span class="dot"></span>价格预警<span class="hint">近期价格异常波动品种</span></div><div id="alert-panel" style="min-height:200px;max-height:340px;overflow-y:auto;padding:4px 0;"></div></div>
+        </div>
+        <div class="grid">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>季节性分析（月度均价趋势）<span class="hint">各品种 12 个月价格波动规律</span></div><div id="line-seasonal" class="chart-box"></div></div>
+            <div class="chart-panel"><div class="title"><span class="dot"></span>批发市场交易量 Top 15</div><div id="bar-market" class="chart-box-sm"></div></div>
+        </div>
+        <div class="grid single">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>品种-省份价格热力矩阵（元/斤）<span class="hint">颜色越深价格越高，支持横向滚动</span></div><div id="heatmap-table-wrap" style="overflow-x:auto;max-height:520px;"></div></div>
+        </div>
+    </div>
+    <!-- 页面4: 综合对比 -->
+    <div class="page" id="page-compare">
+        <!-- 品种对比 -->
+        <div class="chart-panel" style="margin-bottom:14px;">
+            <div class="title"><span class="dot"></span>品种综合对比<span class="hint">选择多个品种横向比较价格、供应链、稳定性</span></div>
+            <div class="var-compare-bar">
+                <label>选择品种（最多6个）：</label>
+                <select id="vcmp-1"><option value="">--</option></select>
+                <select id="vcmp-2"><option value="">--</option></select>
+                <select id="vcmp-3"><option value="">--</option></select>
+                <select id="vcmp-4"><option value="">--</option></select>
+                <select id="vcmp-5"><option value="">--</option></select>
+                <select id="vcmp-6"><option value="">--</option></select>
+                <button onclick="doVarietyCompare()">对比分析</button>
+            </div>
+            <div id="variety-compare-result"></div>
+            <div id="variety-compare-chart" class="chart-box"></div>
+        </div>
+        <!-- 时间段对比 -->
+        <div class="chart-panel" style="margin-bottom:14px;">
+            <div class="title"><span class="dot"></span>时间段对比<span class="hint">同一品种在不同时间段的均价变化</span></div>
+            <div class="var-compare-bar">
+                <label>品种：</label>
+                <select id="tc-veg"><option value="">全部品种</option></select>
+                <label>T1起始：</label><input type="text" class="date-input" id="tc-from1" placeholder="YYYY-MM-DD">
+                <label>T1结束：</label><input type="text" class="date-input" id="tc-to1" placeholder="YYYY-MM-DD">
+                <label>T2起始：</label><input type="text" class="date-input" id="tc-from2" placeholder="YYYY-MM-DD">
+                <label>T2结束：</label><input type="text" class="date-input" id="tc-to2" placeholder="YYYY-MM-DD">
+                <button onclick="doTimeCompare()">对比分析</button>
+            </div>
+            <div id="time-compare-result"></div>
+            <div id="time-compare-chart" class="chart-box"></div>
+        </div>
+        <div class="grid single">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>蔬菜品种综合评分<span class="hint">点击柱形查看种子明细</span></div><div id="bar-score" class="chart-box"></div></div>
+        </div>
+        <div class="grid single">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>省份产业综合雷达图（Top 8）<span class="hint">点击图例省份查看种子明细</span></div><div id="radar-province" class="chart-box-lg"></div></div>
+        </div>
+    </div>
+<!-- 页面5: 大数据深度分析 -->
+    <div class="page" id="page-bigdata">
+        <div class="grid single">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>品种供应链成熟度排名<span class="hint">种子数+供应商数，越高表示产业配套越完善</span></div><div id="bar-supply-maturity" class="chart-box"></div></div>
+        </div>
+        <div class="grid">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>品种-省份综合画像（气泡图）<span class="hint">X轴=种子数，Y轴=供应商数，气泡大小=均价</span></div><div id="scatter-cross-table" class="chart-box"></div></div>
+            <div class="chart-panel">
+                <div class="title"><span class="dot"></span>价格预测 vs 当前均价<span class="hint" id="prediction-hint">趋势预测模型（30天后）</span></div>
+                <div style="margin-bottom:6px;">
+                    <select id="pred-window" style="background:rgba(13,17,48,0.8);border:1px solid rgba(64,158,255,0.2);color:#ccc;border-radius:6px;padding:3px 8px;font-size:11px;" onchange="refreshPrediction()">
+                        <option value="7">7天预测</option>
+                        <option value="14">14天预测</option>
+                        <option value="30" selected>30天预测</option>
+                        <option value="60">60天预测</option>
+                    </select>
+                </div>
+                <div id="bar-price-prediction" class="chart-box"></div>
+            </div>
+        </div>
+        <div class="grid">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>供需关联分析<span class="hint">种子数/供应商数与价格波动率的相关性</span></div><div id="scatter-supply-demand" class="chart-box"></div></div>
+            <div class="chart-panel"><div class="title"><span class="dot"></span>供应链健康评分<span class="hint">综合种子数+供应商数+价格稳定性</span></div><div id="table-supply-health" style="min-height:200px;max-height:340px;overflow-y:auto;padding:4px 0;"></div></div>
+        </div>
+        <div class="grid single">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>数据质量报告<span class="hint">各品种价格记录数与完整性</span></div><div id="bar-data-quality" class="chart-box"></div></div>
+        </div>
+    </div>
+<!-- 页面6: 大数据分析引擎 -->
+    <div class="page" id="page-spark">
+        <!-- Spark ML 模型指标卡片 -->
+        <div class="stats-row" id="spark-metrics-row">
+            <div class="stat-card"><div class="icon">🎯</div><div class="num" id="sm-rmse">-</div><div class="label">RMSE</div><div class="freshness"><em>均方根误差</em></div></div>
+            <div class="stat-card"><div class="icon">📈</div><div class="num" id="sm-r2">-</div><div class="label">R²</div><div class="freshness"><em>决定系数</em></div></div>
+            <div class="stat-card"><div class="icon">📊</div><div class="num" id="sm-mae">-</div><div class="label">MAE</div><div class="freshness"><em>平均绝对误差</em></div></div>
+            <div class="stat-card"><div class="icon">🌲</div><div class="num" id="sm-trees">50</div><div class="label">决策树</div><div class="freshness"><em>RandomForest</em></div></div>
+            <div class="stat-card"><div class="icon">🧬</div><div class="num" id="sm-features">11</div><div class="label">特征数</div><div class="freshness"><em>多维特征向量</em></div></div>
+            <div class="stat-card"><div class="icon">⚡</div><div class="num" id="sm-engine">-</div><div class="label">计算引擎</div><div class="freshness"><em id="sm-engine-sub">Apache Spark</em></div></div>
+        </div>
+        <!-- 特征重要性 + 多窗口预测对比 -->
+        <div class="grid">
+            <div class="chart-panel"><div class="title"><span class="dot"></span>特征重要性排名<span class="hint">Spark MLlib 随机森林 11 维特征</span></div><div id="bar-feature-importance" class="chart-box"></div></div>
+            <div class="chart-panel"><div class="title"><span class="dot"></span>多窗口价格预测对比<span class="hint">7/14/30/60 天预测均价变化</span></div><div id="bar-window-compare" class="chart-box"></div></div>
+        </div>
+        <!-- 大数据技术架构 + Hive 数仓 -->
+        <div class="grid">
+            <div class="chart-panel">
+                <div class="title"><span class="dot"></span>大数据技术架构<span class="hint">Hadoop + Hive + Spark 流水线</span></div>
+                <div id="bigdata-arch-panel" style="min-height:280px;max-height:380px;overflow-y:auto;padding:4px 0;"></div>
+            </div>
+            <div class="chart-panel">
+                <div class="title"><span class="dot"></span>Hive 四层数仓架构<span class="hint">ODS → DWD → DWS → ADS</span></div>
+                <div id="hive-warehouse-panel" style="min-height:280px;max-height:380px;overflow-y:auto;padding:4px 0;"></div>
+            </div>
+        </div>
+        <!-- Spark vs Pandas 对比 -->
+        <div class="grid">
+            <div class="chart-panel">
+                <div class="title"><span class="dot"></span>Spark ML vs Pandas 降级方案对比<span class="hint">双路径预测策略</span></div>
+                <div id="spark-vs-pandas-panel" style="min-height:200px;padding:4px 0;"></div>
+            </div>
+            <div class="chart-panel"><div class="title"><span class="dot"></span>Spark 分析流水线步骤<span class="hint">9 步分布式计算流程</span></div><div id="spark-pipeline-chart" class="chart-box"></div></div>
+        </div>
+    </div>
+</div>
+<!-- 弹窗 -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+        <div class="modal-header">
+            <div><h3 id="modal-title">查询结果</h3><div class="breadcrumb" id="modal-breadcrumb"></div></div>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-toolbar">
+            <span class="result-count" id="result-count"></span>
+            <a class="btn-export" id="btn-export" href="#" target="_blank">📥 导出CSV</a>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-footer">
+            <button id="btn-prev" onclick="modalPrev()" disabled>上一页</button>
+            <span class="page-info" id="page-info">第 1 页</span>
+            <button id="btn-next" onclick="modalNext()">下一页</button>
+        </div>
+    </div>
+</div>
+<script>
+// ====== 粒子 ======
+(function(){const c=document.getElementById('particles');for(let i=0;i<20;i++){const s=document.createElement('span');s.style.left=Math.random()*100+'%';s.style.animationDuration=(8+Math.random()*16)+'s';s.style.animationDelay=Math.random()*10+'s';s.style.width=s.style.height=(2+Math.random()*3)+'px';c.appendChild(s);}})();
+// ====== 工具 ======
+function animateNum(el,target){const s=String(target);const isNum=/^[\d,]+$/.test(s.replace(/,/g,''));if(!isNum){el.textContent=target;return;}const end=parseInt(s.replace(/,/g,''));const st=performance.now();function tick(now){const p=Math.min((now-st)/1200,1);const e=1-Math.pow(1-p,3);el.textContent=Math.floor(e*end).toLocaleString();if(p<1)requestAnimationFrame(tick);else el.textContent=end.toLocaleString();}requestAnimationFrame(tick);}
+const API='/api';
+async function fetchJSON(url){const r=await fetch(API+url);return r.json();}
+// ====== 页面切换 ======
+const charts={},loaded={};
+function switchPage(id){document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));if(!loaded[id]){loaded[id]=true;loadPageCharts(id);}setTimeout(()=>{Object.values(charts).forEach(c=>c&&c.resize());},50);}
+async function loadPageCharts(id){try{switch(id){case'overview':await loadOverview();initChart('map-price',loadMapPrice);initChart('bar-price-veg',loadBarPriceVeg);loadProvinceOptions();break;case'supply':initChart('bar-seed-prov',loadBarSeedProv);initChart('bar-supplier-prov',loadBarSupplierProv);initChart('bar-seed-cat',loadBarSeedCat);initChart('bar-sup-cat',loadBarSupCat);initChart('pie-supplier-type',loadPieSupplierType);break;case'price':await loadVegTypes();initChart('line-trend',loadLineTrend);initChart('bar-volatility',loadBarVolatility);initChart('bar-market',loadBarMarket);initChart('line-seasonal',loadSeasonalChart);loadPriceAlerts();loadHeatmapTable();break;case'compare':await loadVegTypes();loadVarietyCompareOptions();loadTimeCompareOptions();initChart('bar-score',loadBarScore);initChart('radar-province',loadRadarProvince);initChart('variety-compare-chart',function(){});initChart('time-compare-chart',function(){});break;case'bigdata':initChart('bar-supply-maturity',loadBarSupplyMaturity);initChart('scatter-cross-table',loadScatterCrossTable);initChart('bar-price-prediction',loadBarPricePrediction);initChart('bar-data-quality',loadDataQuality);initChart('scatter-supply-demand',loadSupplyDemandChart);loadSupplyHealthTable();break;case'spark':initChart('bar-feature-importance',loadFeatureImportance);initChart('bar-window-compare',loadWindowCompare);initChart('spark-pipeline-chart',loadSparkPipelineChart);loadSparkModelMetrics();loadBigdataArch();loadHiveWarehouse();loadSparkVsPandas();break;}}catch(e){console.error('加载失败:',e);}finally{if(id==='overview'){const ld=document.getElementById('global-loading');if(ld){ld.classList.add('hidden');setTimeout(()=>ld.remove(),600);}}}}
+function initChart(domId,loader){const dom=document.getElementById(domId);if(!dom)return;const c=echarts.init(dom);c.setOption({toolbox:{show:true,right:20,top:0,feature:{saveAsImage:{title:'PNG',pixelRatio:2}}}});charts[domId]=c;loader(c);}
+window.addEventListener('resize',()=>{Object.values(charts).forEach(c=>c&&c.resize());});
+// ====== 弹窗 ======
+let modalState={type:'seeds',keyword:null,province:null,category:null,ent_type:null,page:1,pageSize:20,total:0};
+function openModal(title,breadcrumbs){document.getElementById('modal-title').textContent=title;const bc=document.getElementById('modal-breadcrumb');bc.innerHTML='';if(breadcrumbs){breadcrumbs.forEach(b=>{const sp=document.createElement('span');sp.textContent=b.label+': ';bc.appendChild(sp);const v=document.createElement('span');v.className='val';v.textContent=b.value;bc.appendChild(v);});}document.getElementById('modal-overlay').classList.add('show');}
+function closeModal(){document.getElementById('modal-overlay').classList.remove('show');}
+function modalPrev(){if(modalState.page>1){modalState.page--;fetchAndRenderModal();}}
+function modalNext(){if(modalState.page*modalState.pageSize<modalState.total){modalState.page++;fetchAndRenderModal();}}
+async function fetchAndRenderModal(){
+    const body=document.getElementById('modal-body');body.innerHTML='<div class="loading-row">加载中...</div>';
+    const params=new URLSearchParams({page:modalState.page,page_size:modalState.pageSize});
+    if(modalState.keyword)params.set('keyword',modalState.keyword);
+    if(modalState.province)params.set('province',modalState.province);
+    if(modalState.category)params.set('category',modalState.category);
+    if(modalState.ent_type)params.set('ent_type',modalState.ent_type);
+    const endpoint=modalState.type==='prices'?'/search/prices':modalState.type==='seeds'?'/search/seeds':'/search/suppliers';
+    const d=await fetchJSON(endpoint+'?'+params);
+    modalState.total=d.total;
+    const totalPages=Math.ceil(d.total/d.page_size)||1;
+    document.getElementById('page-info').textContent=`第 ${d.page} / ${totalPages} 页（共 ${d.total} 条）`;
+    document.getElementById('btn-prev').disabled=d.page<=1;
+    document.getElementById('btn-next').disabled=d.page>=totalPages;
+    document.getElementById('result-count').textContent=`共 ${d.total} 条结果`;
+    // CSV导出链接
+    const expParams=new URLSearchParams({type:modalState.type});
+    if(modalState.keyword)expParams.set('keyword',modalState.keyword);
+    if(modalState.province)expParams.set('province',modalState.province);
+    if(modalState.category)expParams.set('category',modalState.category);
+    if(modalState.ent_type)expParams.set('ent_type',modalState.ent_type);
+    document.getElementById('btn-export').href=API+'/export/csv?'+expParams;
+    if(!d.records||d.records.length===0){body.innerHTML='<div class="loading-row">暂无数据</div>';return;}
+    if(modalState.type==='prices'){
+        let h='<table class="data-table"><thead><tr><th>品种</th><th>批发市场</th><th>最低价</th><th>最高价</th><th>平均价</th><th>日期</th><th>省份</th></tr></thead><tbody>';
+        d.records.forEach(r=>{h+=`<tr><td><span class="tag">${r.variety}</span></td><td>${r.market}</td><td class="num-cell">¥${r.min_price}</td><td class="num-cell">¥${r.max_price}</td><td class="num-cell" style="color:#e6a23c;font-weight:bold">¥${r.avg_price}</td><td>${r.date}</td><td>${r.province}</td></tr>`;});
+        body.innerHTML=h+'</tbody></table>';
+    }else if(modalState.type==='seeds'){
+        let h='<table class="data-table"><thead><tr><th>产品名称</th><th>供应地区</th><th>企业名称</th><th>品种</th><th>点击量</th><th>日期</th><th>链接</th></tr></thead><tbody>';
+        d.records.forEach(r=>{const link=r.link&&r.link.startsWith('http')?`<a href="${r.link}" target="_blank">查看详情 ↗</a>`:'-';h+=`<tr><td>${r.name}</td><td>${r.region}</td><td>${r.company}</td><td><span class="tag">${r.category}</span></td><td class="num-cell">${r.clicks.toLocaleString()}</td><td>${r.date}</td><td>${link}</td></tr>`;});
+        body.innerHTML=h+'</tbody></table>';
+    }else{
+        let h='<table class="data-table"><thead><tr><th>产品名称</th><th>产地</th><th>联系人</th><th>企业类型</th><th>品种</th><th>点击量</th><th>链接</th></tr></thead><tbody>';
+        d.records.forEach(r=>{const link=r.link&&r.link.startsWith('http')?`<a href="${r.link}" target="_blank">查看详情 ↗</a>`:'-';h+=`<tr><td>${r.name}</td><td>${r.origin}</td><td>${r.contact}</td><td><span class="tag">${r.type}</span></td><td><span class="tag">${r.category}</span></td><td class="num-cell">${r.clicks.toLocaleString()}</td><td>${link}</td></tr>`;});
+        body.innerHTML=h+'</tbody></table>';
+    }
+}
+function openDrillDown(type,province,category,entType,title,breadcrumbs){
+    modalState={type,keyword:null,province:province||null,category:category||null,ent_type:entType||null,page:1,pageSize:20,total:0};
+    openModal(title||'数据明细',breadcrumbs);fetchAndRenderModal();
+}
+function doSearch(){const type=document.getElementById('search-type').value;const kw=document.getElementById('search-keyword').value.trim();if(!kw)return;const label=type==='seeds'?'种子':'供应商';modalState={type,keyword:kw,province:null,category:null,ent_type:null,page:1,pageSize:20,total:0};openModal(`搜索${label}: "${kw}"`,[{label:'关键词',value:kw},{label:'类型',value:label}]);fetchAndRenderModal();}
+document.getElementById('search-keyword').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
+// ====== 地图 ======
+const chinaMapPromise=fetch('https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json').then(r=>r.json()).then(j=>{echarts.registerMap('china',j);}).catch(e=>console.error('地图加载失败:',e));
+// ====== 品种列表 ======
+let allVegTypes=[];
+async function loadVegTypes(){allVegTypes=await fetchJSON('/vegetable/types');const sel=document.getElementById('trend-veg');sel.innerHTML='<option value="">全部品种</option>';allVegTypes.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});const ov=await fetchJSON('/overview');if(ov.price_date_min){const el=document.getElementById('trend-from');if(el._flatpickr)el._flatpickr.setDate(ov.price_date_min,false);else el.value=ov.price_date_min;}if(ov.price_date_max){const el=document.getElementById('trend-to');if(el._flatpickr)el._flatpickr.setDate(ov.price_date_max,false);else el.value=ov.price_date_max;}}
+async function loadProvinceOptions(){const provs=await fetchJSON('/province/list');for(let i=1;i<=5;i++){const sel=document.getElementById('cmp-p'+i);sel.innerHTML='<option value="">--</option>';provs.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o);});}}
+async function doCompare(){const provs=[];for(let i=1;i<=5;i++){const v=document.getElementById('cmp-p'+i).value;if(v)provs.push(v);}if(provs.length<2){alert('请至少选择2个省份');return;}const d=await fetchJSON('/province/compare?provinces='+provs.join(','));let h='<table class="compare-table"><thead><tr><th>省份</th><th style="text-align:right">种子数</th><th style="text-align:right">供应商数</th><th style="text-align:right">均价(元/斤)</th><th style="text-align:right">品种数</th><th style="text-align:right">市场数</th></tr></thead><tbody>';d.forEach(r=>{h+=`<tr><td><b>${r.province}</b></td><td class="num-cell">${r.seed_count.toLocaleString()}</td><td class="num-cell">${r.supplier_count.toLocaleString()}</td><td class="num-cell">¥${r.avg_price}</td><td class="num-cell">${r.veg_types}</td><td class="num-cell">${r.markets}</td></tr>`;});h+='</tbody></table>';document.getElementById('compare-result').innerHTML=h;}
+// ====== 图表 ======
+async function loadOverview(){const d=await fetchJSON('/overview');animateNum(document.getElementById('s-price'),d.price_count.toLocaleString());animateNum(document.getElementById('s-seed'),d.seed_count.toLocaleString());animateNum(document.getElementById('s-supplier'),d.supplier_count.toLocaleString());animateNum(document.getElementById('s-types'),d.vegetable_types);animateNum(document.getElementById('s-provinces'),d.provinces);animateNum(document.getElementById('s-markets'),d.markets.toLocaleString());if(d.price_date_max)document.getElementById('f-price').innerHTML='最新: <em>'+d.price_date_max+'</em>';if(d.seed_date_max)document.getElementById('f-seed').innerHTML='最新: <em>'+d.seed_date_max+'</em>';if(d.supplier_date_max)document.getElementById('f-supplier').innerHTML='最新: <em>'+d.supplier_date_max+'</em>';}
+async function loadMapPrice(chart){await chinaMapPromise;const d=await fetchJSON('/price/province');const maxP=Math.max(...d.prices);chart.setOption({tooltip:{trigger:'item',backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'},formatter:p=>p.value!==undefined?`<b>${p.name}</b><br/>平均价: <span style="color:#e6a23c;font-weight:bold">¥${p.value}</span>`:`${p.name}<br/>暂无数据`},visualMap:{min:0,max:maxP,left:16,bottom:16,text:['¥'+maxP,'低价'],textStyle:{color:'#6a7a9a',fontSize:11},calculable:true,itemWidth:12,itemHeight:100,inRange:{color:['#1a2a5e','#2b5797','#48a9a6','#d4e157','#ff8a65','#d32f2f']}},series:[{type:'map',map:'china',roam:true,zoom:1.15,scaleLimit:{min:0.8,max:4},label:{show:false},emphasis:{label:{show:true,color:'#fff',fontSize:12},itemStyle:{areaColor:'#2a5298',shadowBlur:20,shadowColor:'rgba(64,158,255,0.4)'}},itemStyle:{areaColor:'#0d1130',borderColor:'rgba(64,158,255,0.25)',borderWidth:0.8},data:d.provinces.map((p,i)=>({name:p,value:d.prices[i]}))}]});chart.on('click',p=>{if(p.name)openDrillDown('prices',p.name,null,null,`省份「${p.name}」价格明细`,[{label:'省份',value:p.name},{label:'类型',value:'价格'}]);});}
+async function loadBarPriceVeg(chart){const d=await fetchJSON('/price/vegetable');chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'}},grid:{left:80,right:50,top:8,bottom:20},xAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:11},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},yAxis:{type:'category',data:[...d.vegetables].reverse(),axisLabel:{color:'#a0b0cc',fontSize:11},axisLine:{show:false},axisTick:{show:false}},series:[{type:'bar',data:[...d.prices].reverse(),barMaxWidth:16,itemStyle:{borderRadius:[0,8,8,0],color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'rgba(64,158,255,0.8)'},{offset:1,color:'rgba(103,194,58,0.8)'}])},label:{show:true,position:'right',color:'#8899bb',fontSize:10,formatter:'¥{c}'}}]});}
+async function loadBarSeedProv(chart){const d=await fetchJSON('/seed/distribution');chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(230,162,60,0.3)',textStyle:{color:'#ccc'}},grid:{left:50,right:16,top:10,bottom:40},xAxis:{type:'category',data:d.provinces.slice(0,15),axisLabel:{color:'#8899bb',fontSize:10,rotate:35},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:10},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{type:'bar',data:d.counts.slice(0,15),barMaxWidth:28,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(230,162,60,0.3)'},{offset:1,color:'#e6a23c'}])},label:{show:true,position:'top',color:'#8899bb',fontSize:10},emphasis:{itemStyle:{color:'#feca57'}}}]});chart.on('click',p=>{openDrillDown('seeds',p.name,null,null,`省份「${p.name}」种子明细`,[{label:'省份',value:p.name},{label:'类型',value:'种子'}]);});}
+async function loadBarSupplierProv(chart){const d=await fetchJSON('/supplier/distribution');chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(103,194,58,0.3)',textStyle:{color:'#ccc'}},grid:{left:50,right:16,top:10,bottom:40},xAxis:{type:'category',data:d.provinces.slice(0,15),axisLabel:{color:'#8899bb',fontSize:10,rotate:35},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:10},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{type:'bar',data:d.counts.slice(0,15),barMaxWidth:28,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(103,194,58,0.3)'},{offset:1,color:'#67c23a'}])},label:{show:true,position:'top',color:'#8899bb',fontSize:10},emphasis:{itemStyle:{color:'#a0e8a0'}}}]});chart.on('click',p=>{openDrillDown('suppliers',p.name,null,null,`省份「${p.name}」供应商明细`,[{label:'省份',value:p.name},{label:'类型',value:'供应商'}]);});}
+async function loadBarSeedCat(chart){const d=await fetchJSON('/seed/category?top_n=15');chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(155,89,182,0.3)',textStyle:{color:'#ccc'}},grid:{left:60,right:16,top:10,bottom:40},xAxis:{type:'category',data:d.categories,axisLabel:{color:'#8899bb',fontSize:10,rotate:30},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:10},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{type:'bar',data:d.counts,barMaxWidth:28,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(155,89,182,0.3)'},{offset:1,color:'#9b59b6'}])},label:{show:true,position:'top',color:'#8899bb',fontSize:10},emphasis:{itemStyle:{color:'#bb77dd'}}}]});chart.on('click',p=>{openDrillDown('seeds',null,p.name,null,`品种「${p.name}」种子明细`,[{label:'品种',value:p.name},{label:'类型',value:'种子'}]);});}
+async function loadBarSupCat(chart){const d=await fetchJSON('/supplier/category?top_n=15');chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(0,210,211,0.3)',textStyle:{color:'#ccc'}},grid:{left:60,right:16,top:10,bottom:40},xAxis:{type:'category',data:d.categories,axisLabel:{color:'#8899bb',fontSize:10,rotate:30},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:10},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{type:'bar',data:d.counts,barMaxWidth:28,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(0,210,211,0.3)'},{offset:1,color:'#00d2d3'}])},label:{show:true,position:'top',color:'#8899bb',fontSize:10},emphasis:{itemStyle:{color:'#44eeff'}}}]});chart.on('click',p=>{openDrillDown('suppliers',null,p.name,null,`品种「${p.name}」供应商明细`,[{label:'品种',value:p.name},{label:'类型',value:'供应商'}]);});}
+async function loadPieSupplierType(chart){const d=await fetchJSON('/supplier/type');const colors=['#409eff','#67c23a','#e6a23c','#f56c6c','#9b59b6','#00d2d3','#ff6b6b','#48dbfb','#feca57','#54a0ff'];chart.setOption({tooltip:{trigger:'item',backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(254,202,87,0.3)',textStyle:{color:'#ccc'},formatter:p=>`${p.marker} ${p.name}<br/>数量: <b>${p.value.toLocaleString()}</b> (${p.percent}%)`},legend:{orient:'vertical',right:'5%',top:'center',textStyle:{color:'#8899bb',fontSize:11},itemWidth:10,itemHeight:10},color:colors,series:[{type:'pie',radius:['35%','65%'],center:['40%','52%'],avoidLabelOverlap:true,label:{show:false},emphasis:{label:{show:true,color:'#fff',fontSize:12,fontWeight:'bold'},itemStyle:{shadowBlur:16,shadowColor:'rgba(0,0,0,0.4)'}},itemStyle:{borderRadius:6,borderColor:'#06091a',borderWidth:2},data:d.types.map((t,i)=>({name:t||'未知',value:d.counts[i]}))}]});chart.on('click',p=>{if(p.name&&p.name!=='未知')openDrillDown('suppliers',null,null,p.name,`企业类型「${p.name}」明细`,[{label:'企业类型',value:p.name}]);});}
+async function refreshTrend(){const veg=document.getElementById('trend-veg').value;const from=document.getElementById('trend-from').value;const to=document.getElementById('trend-to').value;const params=new URLSearchParams();if(veg)params.set('vegetable_type',veg);if(from)params.set('date_from',from);if(to)params.set('date_to',to);const d=await fetchJSON('/price/trend?'+params);const chart=charts['line-trend'];if(!chart)return;chart.setOption({xAxis:{data:d.dates},series:[{data:d.prices}]});}
+async function loadLineTrend(chart){const d=await fetchJSON('/price/trend');chart.setOption({tooltip:{trigger:'axis',backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(0,210,211,0.3)',textStyle:{color:'#ccc'},formatter:p=>`<b>${p[0].axisValue}</b><br/>${p[0].marker} 平均价: <b style="color:#00d2d3">¥${p[0].value}</b>`},grid:{left:55,right:24,top:16,bottom:36},xAxis:{type:'category',data:d.dates,boundaryGap:false,axisLabel:{color:'#6a7a9a',fontSize:10,rotate:25},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:11},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{type:'line',data:d.prices,smooth:0.4,lineStyle:{color:'#00d2d3',width:2.5,shadowColor:'rgba(0,210,211,0.3)',shadowBlur:10},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(0,210,211,0.35)'},{offset:0.7,color:'rgba(0,210,211,0.05)'},{offset:1,color:'rgba(0,210,211,0)'}])},itemStyle:{color:'#00d2d3'},symbol:'none'}],dataZoom:[{type:'inside',start:0,end:100}]});}
+async function loadBarVolatility(chart){const d=await fetchJSON('/price/volatility');chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(255,107,107,0.3)',textStyle:{color:'#ccc'},formatter:p=>`<b>${p[0].axisValue}</b><br/>波动系数: <b>${p[0].value}</b>`},grid:{left:80,right:40,top:8,bottom:20},xAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:10},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},yAxis:{type:'category',data:[...d.vegetables].reverse(),axisLabel:{color:'#a0b0cc',fontSize:10},axisLine:{show:false},axisTick:{show:false}},series:[{type:'bar',data:[...d.volatility].reverse(),barMaxWidth:14,itemStyle:{borderRadius:[0,6,6,0],color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'rgba(255,107,107,0.4)'},{offset:1,color:'#ff6b6b'}])},label:{show:true,position:'right',color:'#8899bb',fontSize:9}}]});}
+async function loadBarMarket(chart){const d=await fetchJSON('/market/ranking');chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(72,219,251,0.3)',textStyle:{color:'#ccc'},formatter:p=>`<b>${p[0].axisValue}</b><br/>记录数: <b>${p[0].value.toLocaleString()}</b>`},grid:{left:50,right:16,top:10,bottom:50},xAxis:{type:'category',data:d.markets,axisLabel:{color:'#8899bb',fontSize:9,rotate:40,interval:0,formatter:v=>v.length>8?v.slice(0,8)+'…':v},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:10},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{type:'bar',data:d.counts,barMaxWidth:26,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(72,219,251,0.3)'},{offset:1,color:'#48dbfb'}])},label:{show:true,position:'top',color:'#8899bb',fontSize:9}}]});}
+async function loadBarScore(chart){const d=await fetchJSON('/vegetable/score');chart.setOption({tooltip:{trigger:'axis',backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(155,89,182,0.3)',textStyle:{color:'#ccc'},formatter:function(params){let t='<b>'+params[0].axisValue+'</b><br/>';params.forEach(p=>{t+=p.marker+' '+p.seriesName+': <b>'+p.value+'</b><br/>';});return t;}},legend:{data:['种子丰富度','供应商数量','综合分'],textStyle:{color:'#8899bb',fontSize:11},top:0},grid:{left:60,right:60,top:44,bottom:30},xAxis:{type:'category',data:d.vegetables,axisLabel:{color:'#8899bb',fontSize:11,rotate:15},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:[{type:'value',name:'数量',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},{type:'value',name:'综合分',max:1,axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{show:false}}],series:[{name:'种子丰富度',type:'bar',data:d.seed_scores,barMaxWidth:18,itemStyle:{color:'#e6a23c',borderRadius:[4,4,0,0]}},{name:'供应商数量',type:'bar',data:d.supplier_scores,barMaxWidth:18,itemStyle:{color:'#67c23a',borderRadius:[4,4,0,0]}},{name:'综合分',type:'line',yAxisIndex:1,data:d.total_scores,lineStyle:{color:'#f56c6c',width:2.5,shadowColor:'rgba(245,108,108,0.4)',shadowBlur:8},itemStyle:{color:'#f56c6c',borderWidth:2},symbol:'circle',symbolSize:10,areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(245,108,108,0.15)'},{offset:1,color:'rgba(245,108,108,0)'}])}}]});chart.on('click',p=>{if(p.seriesName==='种子丰富度'&&p.name)openDrillDown('seeds',null,p.name,null,`品种「${p.name}」种子明细`,[{label:'品种',value:p.name},{label:'类型',value:'种子'}]);});}
+async function loadRadarProvince(chart){const d=await fetchJSON('/province/radar');const maxV=d.max_values;const colors=['#409eff','#67c23a','#e6a23c','#f56c6c','#9b59b6','#00d2d3','#ff6b6b','#48dbfb'];chart.setOption({tooltip:{backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'}},legend:{data:d.provinces,orient:'vertical',right:'2%',top:'center',textStyle:{color:'#8899bb',fontSize:11},itemWidth:12,itemHeight:8},radar:{indicator:[{name:'种子数',max:maxV.seed_count},{name:'供应商数',max:maxV.supplier_count},{name:'平均价(元)',max:maxV.avg_price}],center:['38%','52%'],radius:'62%',axisName:{color:'#8899bb',fontSize:12},splitArea:{areaStyle:{color:['rgba(64,158,255,0.02)','rgba(64,158,255,0.05)']}},splitLine:{lineStyle:{color:'rgba(64,158,255,0.12)'}},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}}},series:[{type:'radar',symbol:'circle',symbolSize:5,data:d.provinces.map((prov,i)=>({name:prov,value:[d.data[i].seed_count,d.data[i].supplier_count,d.data[i].avg_price],lineStyle:{color:colors[i%8],width:2},areaStyle:{color:colors[i%8],opacity:0.1},itemStyle:{color:colors[i%8]}}))}]});chart.on('click',p=>{if(p.name)openDrillDown('seeds',p.name,null,null,`省份「${p.name}」种子明细`,[{label:'省份',value:p.name},{label:'类型',value:'种子'}]);});}
+async function loadBarSupplyMaturity(chart){const d=await fetchJSON('/analysis/cross-table/summary');if(!d.data||!d.data.length){chart.setOption({title:{text:'暂无数据',left:'center',top:'center',textStyle:{color:'#6a7a9a'}}});return;}const items=d.data.slice(0,20);const names=items.map(r=>r['品种']);const seeds=items.map(r=>r.total_seeds);const sups=items.map(r=>r.total_suppliers);chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'},formatter:function(p){let t='<b>'+p[0].axisValue+'</b><br/>';p.forEach(s=>{t+=s.marker+' '+s.seriesName+': <b>'+s.value+'</b><br/>';});const idx=names.indexOf(p[0].axisValue);if(idx>=0)t+='供应链成熟度: <b>'+(seeds[idx]+sups[idx])+'</b>';return t;}},legend:{data:['种子总数','供应商总数'],textStyle:{color:'#8899bb',fontSize:11},top:0},grid:{left:70,right:50,top:36,bottom:30},xAxis:{type:'category',data:names,axisLabel:{color:'#8899bb',fontSize:10,rotate:20},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:{type:'value',axisLabel:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{name:'种子总数',type:'bar',stack:'total',data:seeds,barMaxWidth:22,itemStyle:{color:'#e6a23c',borderRadius:[0,0,0,0]}},{name:'供应商总数',type:'bar',stack:'total',data:sups,barMaxWidth:22,itemStyle:{color:'#409eff',borderRadius:[4,4,0,0]}}]});}
+async function loadScatterCrossTable(chart){const d=await fetchJSON('/analysis/cross-table?top_n=200');if(!d.data||!d.data.length){chart.setOption({title:{text:'暂无数据',left:'center',top:'center',textStyle:{color:'#6a7a9a'}}});return;}const items=d.data;const scatterData=items.map(r=>[r.seed_count||0,r.supplier_count||0,r.avg_price||0,r['品种']||'',r['省份简称']||'']);const maxPrice=Math.max(...scatterData.map(d=>d[2]),1);chart.setOption({tooltip:{backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(155,89,182,0.3)',textStyle:{color:'#ccc'},formatter:p=>'<b>'+p.data[3]+'</b> - '+p.data[4]+'<br/>种子数: <b>'+p.data[0]+'</b><br/>供应商数: <b>'+p.data[1]+'</b><br/>均价: <b style="color:#feca57">¥'+p.data[2]+'</b>'},grid:{left:55,right:80,top:8,bottom:40},xAxis:{type:'value',name:'种子数',nameTextStyle:{color:'#6a7a9a',fontSize:11},axisLabel:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},yAxis:{type:'value',name:'供应商数',nameTextStyle:{color:'#6a7a9a',fontSize:11},axisLabel:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},visualMap:{dimension:2,min:0,max:maxPrice,calculable:true,orient:'vertical',right:0,top:'center',text:['¥'+maxPrice,'¥0'],textStyle:{color:'#6a7a9a',fontSize:10},itemWidth:10,itemHeight:100,inRange:{color:['#54a0ff','#00d2d3','#67c23a','#e6a23c','#f56c6c']}},series:[{type:'scatter',symbolSize:function(d){return Math.max(6,Math.min(30,(d[2]/maxPrice)*30));},data:scatterData,itemStyle:{opacity:0.75},emphasis:{itemStyle:{shadowBlur:12,shadowColor:'rgba(0,0,0,0.4)',opacity:1}}}]});}
+async function loadBarPricePrediction(chart){const w=document.getElementById('pred-window')?document.getElementById('pred-window').value:'30';const d=await fetchJSON('/price/prediction?window='+w);if(!d.data||!d.data.length){chart.setOption({title:{text:'暂无预测数据',left:'center',top:'center',textStyle:{color:'#6a7a9a'}}});return;}const items=d.data.slice(0,15);const names=items.map(r=>r['品种']||'');const predicted=items.map(r=>r.predicted_price||0);const current=items.map(r=>r.current_avg_price||0);const mi=d.model_info||{};const hintEl=document.getElementById('prediction-hint');if(hintEl){const isRF=mi.algorithm&&mi.algorithm.indexOf('RandomForest')>=0;const algoLabel=isRF?'随机森林回归':'趋势预测(EMA+季节性)';let hintText=algoLabel+'（'+w+'天后）';if(mi.rmse)hintText+=' | R²='+mi.r2.toFixed(3)+' RMSE='+mi.rmse.toFixed(3);hintEl.innerHTML=hintText;}const upper=items.map(r=>r.confidence_upper||(r.predicted_price+(mi.rmse||0)*1.96));const lower=items.map(r=>r.confidence_lower||Math.max(0,(r.predicted_price||0)-(mi.rmse||0)*1.96));chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(0,210,211,0.3)',textStyle:{color:'#ccc'},formatter:function(p){let t='<b>'+p[0].axisValue+'</b><br/>';p.forEach(s=>{if(s.seriesName!=='置信区间')t+=s.marker+' '+s.seriesName+': <b>¥'+s.value+'</b><br/>';});if(p[0]&&p[1]&&p[1].value>0){const diff=((p[0].value-p[1].value)/p[1].value*100).toFixed(1);t+='变化: <b style="color:'+(diff>0?'#f56c6c':'#67c23a')+'">'+((diff>0?'+':'')+diff)+'%</b>';}const idx=p[0].dataIndex;if(lower[idx]!==undefined)t+='95%置信区间: <b style="color:#feca57">¥'+lower[idx].toFixed(2)+' ~ ¥'+upper[idx].toFixed(2)+'</b>';return t;}},legend:{data:['预测价格','当前均价'],textStyle:{color:'#8899bb',fontSize:11},top:0},grid:{left:55,right:20,top:40,bottom:40},xAxis:{type:'category',data:names,axisLabel:{color:'#8899bb',fontSize:10,rotate:20},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:{type:'value',name:'元/斤',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{name:'预测价格',type:'bar',data:predicted,barMaxWidth:18,barGap:'30%',itemStyle:{borderRadius:[4,4,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(0,210,211,0.3)'},{offset:1,color:'#00d2d3'}])}},{name:'当前均价',type:'bar',data:current,barMaxWidth:18,itemStyle:{borderRadius:[4,4,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(230,162,60,0.3)'},{offset:1,color:'#e6a23c'}])}},{name:'置信区间',type:'custom',renderItem:function(params,api){const idx=params.dataIndex;const low=api.coord([idx,lower[idx]]);const high=api.coord([idx,upper[idx]]);const w2=6;return{type:'group',children:[{type:'line',shape:{x1:low[0],y1:low[1],x2:high[0],y2:high[1]},style:{stroke:'#feca57',lineWidth:1.5}},{type:'line',shape:{x1:low[0]-w2,y1:low[1],x2:low[0]+w2,y2:low[1]},style:{stroke:'#feca57',lineWidth:1.5}},{type:'line',shape:{x1:high[0]-w2,y1:high[1],x2:high[0]+w2,y2:high[1]},style:{stroke:'#feca57',lineWidth:1.5}}]};},data:predicted.map((v,i)=>i),z:10}]});}
+function refreshPrediction(){const c=charts['bar-price-prediction'];if(c){c.clear();c.setOption({toolbox:{show:true,right:20,top:0,feature:{saveAsImage:{title:'PNG',pixelRatio:2}}}});loadBarPricePrediction(c);}}
+async function loadHeatmapTable(){const wrap=document.getElementById('heatmap-table-wrap');if(!wrap)return;wrap.innerHTML='<div class="loading-row">加载中...</div>';try{const d=await fetchJSON('/price/heatmap');if(!d.data||!d.data.length){wrap.innerHTML='<div class="loading-row">暂无热力图数据</div>';return;}const vegs=d.vegetables;const provs=d.provinces;const map={};d.data.forEach(v=>{map[v[0]+'_'+v[1]]=v[2];});const vals=d.data.map(v=>v[2]);const maxV=Math.max(...vals,1);const minV=Math.min(...vals,0);function getColor(v){const ratio=(v-minV)/(maxV-minV||1);const r=Math.round(26+ratio*200);const g=Math.round(42+ratio*100);const b=Math.round(94-ratio*60);return `rgb(${r},${g},${b})`;}let h='<table class="heatmap-table"><thead><tr><th></th>';provs.forEach(p=>{h+='<th>'+p+'</th>';});h+='</tr></thead><tbody>';vegs.forEach((veg,i)=>{h+='<tr><td class="veg-header">'+veg+'</td>';provs.forEach((prov,j)=>{const val=map[i+'_'+j];if(val!==undefined){h+='<td class="heatmap-cell" style="background:'+getColor(val)+'">'+val.toFixed(1)+'</td>';}else{h+='<td style="color:#2a3a5e">-</td>';}});h+='</tr>';});h+='</tbody></table>';wrap.innerHTML=h;}catch(e){wrap.innerHTML='<div class="loading-row">加载失败: '+e.message+'</div>';}}
+async function loadDataQuality(chart){const d=await fetchJSON('/analysis/data-quality');if(!d.varieties||!d.varieties.length){chart.setOption({title:{text:'暂无数据',left:'center',top:'center',textStyle:{color:'#6a7a9a'}}});return;}const items=d.varieties.slice(0,25);const names=items.map(v=>v.name);const counts=items.map(v=>v.record_count);const completeness=items.map(v=>v.completeness);chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'},formatter:function(p){let t='<b>'+p[0].axisValue+'</b><br/>';p.forEach(s=>{t+=s.marker+' '+s.seriesName+': <b>'+s.value+(s.seriesName==='完整度'?'%':'')+'</b><br/>';});return t;}},legend:{data:['价格记录数','完整度'],textStyle:{color:'#8899bb',fontSize:11},top:0},grid:{left:60,right:60,top:40,bottom:30},xAxis:{type:'category',data:names,axisLabel:{color:'#8899bb',fontSize:10,rotate:25},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:[{type:'value',name:'记录数',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},{type:'value',name:'完整度(%)',max:100,axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{show:false}}],series:[{name:'价格记录数',type:'bar',data:counts,barMaxWidth:20,itemStyle:{borderRadius:[4,4,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(64,158,255,0.3)'},{offset:1,color:'#409eff'}])}},{name:'完整度',type:'line',yAxisIndex:1,data:completeness,lineStyle:{color:'#67c23a',width:2},itemStyle:{color:'#67c23a'},symbol:'circle',symbolSize:6}]});}
+// ====== 季节性分析 ======
+async function loadSeasonalChart(chart){const d=await fetchJSON('/analysis/seasonal?top_n=8');if(!d.data||!d.data.length){chart.setOption({title:{text:'暂无数据',left:'center',top:'center',textStyle:{color:'#6a7a9a'}}});return;}const months=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];const colors=['#409eff','#67c23a','#e6a23c','#f56c6c','#9b59b6','#00d2d3','#ff6b6b','#48dbfb'];const series=d.data.map((v,i)=>({name:v.name,type:'line',data:v.monthly_prices,smooth:0.3,lineStyle:{width:2,color:colors[i%8]},itemStyle:{color:colors[i%8]},symbol:'circle',symbolSize:4,connectNulls:true}));chart.setOption({tooltip:{trigger:'axis',backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc',fontSize:11}},legend:{data:d.data.map(v=>v.name),textStyle:{color:'#8899bb',fontSize:10},top:0,type:'scroll'},grid:{left:50,right:20,top:40,bottom:30},xAxis:{type:'category',data:months,axisLabel:{color:'#8899bb',fontSize:10},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}}},yAxis:{type:'value',name:'元/斤',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:series});}
+// ====== 价格预警 ======
+async function loadPriceAlerts(){const panel=document.getElementById('alert-panel');if(!panel)return;panel.innerHTML='<div style="color:#4a5a7a;padding:20px;text-align:center;">加载中...</div>';try{const d=await fetchJSON('/price/alerts');if(!d.alerts||!d.alerts.length){panel.innerHTML='<div style="color:#67c23a;padding:30px;text-align:center;font-size:13px;">✔ 暂无异常波动品种<br/><span style="font-size:11px;color:#4a5a7a;">所有品种价格波动在正常范围内</span></div>';return;}let h='';d.alerts.forEach(a=>{const bg=a.level==='red'?'rgba(245,108,108,0.12)':'rgba(230,162,60,0.12)';const bc=a.level==='red'?'rgba(245,108,108,0.4)':'rgba(230,162,60,0.4)';const tc=a.level==='red'?'#f56c6c':'#e6a23c';const label=a.level==='red'?'红色预警':'黄色预警';const arrow=a.change_rate>0?'↑':'↓';h+=`<div style="background:${bg};border:1px solid ${bc};border-radius:10px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">`;h+=`<span style="background:${tc};color:#fff;font-size:9px;padding:2px 8px;border-radius:4px;font-weight:700;white-space:nowrap;">${label}</span>`;h+=`<div style="flex:1;"><b style="color:#fff;font-size:13px;">${a.name}</b><div style="color:#6a7a9a;font-size:10px;margin-top:2px;">均价 ¥${a.current_avg} → 变化 <span style="color:${tc};font-weight:700;">${arrow}${Math.abs(a.change_rate)}%</span></div></div></div>`;});panel.innerHTML=h;}catch(e){panel.innerHTML='<div style="color:#f56c6c;padding:12px;">加载失败</div>';}}
+// ====== 供需关联分析 ======
+async function loadSupplyDemandChart(chart){const d=await fetchJSON('/analysis/supply-demand');if(!d.data||!d.data.length){chart.setOption({title:{text:'暂无数据',left:'center',top:'center',textStyle:{color:'#6a7a9a'}}});return;}const seedData=d.data.map(r=>[r.seeds,r.cv,r.name]);const supData=d.data.map(r=>[r.suppliers,r.cv,r.name]);chart.setOption({tooltip:{backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'},formatter:p=>'<b>'+p.data[2]+'</b><br/>'+p.seriesName+'<br/>X: '+p.data[0]+' Y: '+p.data[1]},legend:{data:['种子数 vs 波动率','供应商数 vs 波动率'],textStyle:{color:'#8899bb',fontSize:10},top:0},grid:[{left:'8%',right:'55%',top:40,bottom:40},{left:'58%',right:'8%',top:40,bottom:40}],xAxis:[{gridIndex:0,type:'value',name:'种子数',nameTextStyle:{color:'#6a7a9a'},axisLabel:{color:'#5a6a8a',fontSize:9},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},{gridIndex:1,type:'value',name:'供应商数',nameTextStyle:{color:'#6a7a9a'},axisLabel:{color:'#5a6a8a',fontSize:9},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}}],yAxis:[{gridIndex:0,type:'value',name:'波动率(CV)',nameTextStyle:{color:'#6a7a9a'},axisLabel:{color:'#5a6a8a',fontSize:9},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},{gridIndex:1,type:'value',name:'波动率(CV)',nameTextStyle:{color:'#6a7a9a'},axisLabel:{color:'#5a6a8a',fontSize:9},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}}],series:[{name:'种子数 vs 波动率',type:'scatter',xAxisIndex:0,yAxisIndex:0,data:seedData,symbolSize:8,itemStyle:{color:'#e6a23c',opacity:0.7}},{name:'供应商数 vs 波动率',type:'scatter',xAxisIndex:1,yAxisIndex:1,data:supData,symbolSize:8,itemStyle:{color:'#409eff',opacity:0.7}}],graphic:[{type:'text',left:'8%',top:22,style:{text:'r = '+d.r_seed_cv,fill:'#e6a23c',fontSize:11,fontWeight:'bold'}},{type:'text',left:'58%',top:22,style:{text:'r = '+d.r_supplier_cv,fill:'#409eff',fontSize:11,fontWeight:'bold'}}]});}
+// ====== 供应链健康评分 ======
+async function loadSupplyHealthTable(){const wrap=document.getElementById('table-supply-health');if(!wrap)return;wrap.innerHTML='<div style="color:#4a5a7a;padding:20px;text-align:center;">加载中...</div>';try{const d=await fetchJSON('/analysis/supply-chain-health');if(!d.data||!d.data.length){wrap.innerHTML='<div style="color:#6a7a9a;padding:20px;text-align:center;">暂无数据</div>';return;}const gradeColor={A:'#67c23a',B:'#409eff',C:'#e6a23c',D:'#f56c6c'};let h='<table class="data-table" style="font-size:11px;"><thead><tr><th>品种</th><th>种子数</th><th>供应商</th><th>波动率</th><th>健康指数</th><th>等级</th><th>模拟+20%</th></tr></thead><tbody>';d.data.slice(0,20).forEach(r=>{const gc=gradeColor[r.grade]||'#6a7a9a';h+=`<tr><td><b>${r.name}</b></td><td class="num-cell">${r.seeds}</td><td class="num-cell">${r.suppliers}</td><td class="num-cell">${r.cv}</td><td class="num-cell" style="font-weight:bold;color:${gc};">${r.health_score}</td><td style="text-align:center;"><span style="background:${gc};color:#fff;font-size:9px;padding:1px 6px;border-radius:3px;font-weight:700;">${r.grade}</span></td><td class="num-cell" style="color:${r.sim_improvement>0?'#67c23a':'#6a7a9a'};">${r.sim_improvement>0?'+':''}${r.sim_improvement}%</td></tr>`;});h+='</tbody></table>';wrap.innerHTML=h;}catch(e){wrap.innerHTML='<div style="color:#f56c6c;padding:12px;">加载失败</div>';}}
+// ====== 初始化 ======
+(async function(){loaded['overview']=true;await loadPageCharts('overview');})();
+// ====== 刷新 ======
+async function manualRefresh(){const btn=document.getElementById('btn-manual-refresh');btn.classList.add('loading');btn.textContent='刷新中...';try{const r=await fetch(API+'/data/refresh',{method:'POST'});btn.textContent='↻ 刷新数据';btn.classList.remove('loading');if(loaded['overview']){loaded['overview']=false;loadPageCharts('overview');}}catch(e){btn.textContent='刷新失败';setTimeout(()=>{btn.textContent='↻ 刷新数据';btn.classList.remove('loading');},2000);}}
+// ====== flatpickr 日历组件初始化 ======
+function initFlatpickr(){const fpConfig={locale:'zh',dateFormat:'Y-m-d',allowInput:true,clickOpens:true,disableMobile:true};const allDateInputs=document.querySelectorAll('.date-input');allDateInputs.forEach(el=>{flatpickr(el,fpConfig);});}
+initFlatpickr();
+// ====== 品种对比 ======
+function loadVarietyCompareOptions(){const vegs=allVegTypes||[];for(let i=1;i<=6;i++){const sel=document.getElementById('vcmp-'+i);if(!sel)continue;sel.innerHTML='<option value="">--</option>';vegs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});}}
+function loadTimeCompareOptions(){const vegs=allVegTypes||[];const sel=document.getElementById('tc-veg');if(!sel)return;sel.innerHTML='<option value="">全部品种</option>';vegs.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});}
+async function doVarietyCompare(){const vegs=[];for(let i=1;i<=6;i++){const v=document.getElementById('vcmp-'+i).value;if(v)vegs.push(v);}if(vegs.length<2){alert('请至少选择2个品种');return;}const d=await fetchJSON('/variety/compare?varieties='+vegs.join(','));if(!d||!d.length){document.getElementById('variety-compare-result').innerHTML='<div style="color:#6a7a9a;padding:12px;">无数据</div>';return;}
+let h='<table class="compare-table"><thead><tr><th>品种</th><th style="text-align:right">均价</th><th style="text-align:right">波动率</th><th style="text-align:right">省份数</th><th style="text-align:right">市场数</th><th style="text-align:right">种子数</th><th style="text-align:right">供应商数</th><th style="text-align:right">记录数</th></tr></thead><tbody>';
+d.forEach(r=>{h+=`<tr><td><b>${r.name}</b></td><td class="num-cell">¥${r.avg_price}</td><td class="num-cell">${r.volatility}</td><td class="num-cell">${r.province_count}</td><td class="num-cell">${r.market_count}</td><td class="num-cell">${r.seed_count.toLocaleString()}</td><td class="num-cell">${r.supplier_count.toLocaleString()}</td><td class="num-cell">${r.record_count.toLocaleString()}</td></tr>`;});h+='</tbody></table>';
+document.getElementById('variety-compare-result').innerHTML=h;
+const chart=charts['variety-compare-chart'];if(!chart)return;
+const names=d.map(r=>r.name);
+chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'},formatter:function(p){let t='<b>'+p[0].axisValue+'</b><br/>';p.forEach(s=>{t+=s.marker+' '+s.seriesName+': <b>'+s.value+(s.seriesName==='均价'||s.seriesName==='均价'?'元':'')+'</b><br/>';});return t;}},legend:{data:['均价','波动率','种子数','供应商数'],textStyle:{color:'#8899bb',fontSize:11},top:0},grid:{left:60,right:60,top:40,bottom:30},xAxis:{type:'category',data:names,axisLabel:{color:'#8899bb',fontSize:11,rotate:15},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:[{type:'value',name:'数量',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},{type:'value',name:'均价/波动',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{show:false}}],series:[{name:'均价',type:'bar',yAxisIndex:1,data:d.map(r=>r.avg_price),barMaxWidth:18,itemStyle:{color:'#e6a23c',borderRadius:[4,4,0,0]}},{name:'波动率',type:'bar',yAxisIndex:1,data:d.map(r=>r.volatility),barMaxWidth:18,itemStyle:{color:'#f56c6c',borderRadius:[4,4,0,0]}},{name:'种子数',type:'bar',data:d.map(r=>r.seed_count),barMaxWidth:18,itemStyle:{color:'#67c23a',borderRadius:[4,4,0,0]}},{name:'供应商数',type:'bar',data:d.map(r=>r.supplier_count),barMaxWidth:18,itemStyle:{color:'#409eff',borderRadius:[4,4,0,0]}}]},true);}
+async function doTimeCompare(){const veg=document.getElementById('tc-veg').value;const f1=document.getElementById('tc-from1').value;const t1=document.getElementById('tc-to1').value;const f2=document.getElementById('tc-from2').value;const t2=document.getElementById('tc-to2').value;
+if(!f1||!t1||!f2||!t2){alert('请填写完整的两个时间段');return;}
+const periods=[{label:'T1 ('+f1+'~'+t1+')',from:f1,to:t1},{label:'T2 ('+f2+'~'+t2+')',from:f2,to:t2}];
+const r=await fetch(API+'/analysis/time-compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({vegetable_type:veg||null,periods:periods})});
+const d=await r.json();if(!d||!d.length){document.getElementById('time-compare-result').innerHTML='<div style="color:#6a7a9a;padding:12px;">无数据</div>';return;}
+let h='<table class="compare-table"><thead><tr><th>时间段</th><th style="text-align:right">均价</th><th style="text-align:right">最低价</th><th style="text-align:right">最高价</th><th style="text-align:right">记录数</th></tr></thead><tbody>';
+d.forEach(r=>{h+=`<tr><td><b>${r.label}</b></td><td class="num-cell">¥${r.avg_price}</td><td class="num-cell">¥${r.min_price}</td><td class="num-cell">¥${r.max_price}</td><td class="num-cell">${r.record_count.toLocaleString()}</td></tr>`;});
+if(d.length===2&&d[0].avg_price>0){const diff=((d[1].avg_price-d[0].avg_price)/d[0].avg_price*100).toFixed(1);const color=diff>0?'#f56c6c':'#67c23a';h+=`<tr><td colspan="2"><b>均价变化</b></td><td colspan="3" class="num-cell" style="color:${color};font-size:14px;font-weight:bold">${diff>0?'+':''}${diff}%</td></tr>`;}
+h+='</tbody></table>';document.getElementById('time-compare-result').innerHTML=h;
+const chart=charts['time-compare-chart'];if(!chart)return;
+const labels=d.map(r=>r.label);
+chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'}},legend:{data:['均价','最低价','最高价'],textStyle:{color:'#8899bb',fontSize:11},top:0},grid:{left:55,right:20,top:40,bottom:30},xAxis:{type:'category',data:labels,axisLabel:{color:'#8899bb',fontSize:11},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}}},yAxis:{type:'value',name:'元/斤',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},series:[{name:'均价',type:'bar',data:d.map(r=>r.avg_price),barMaxWidth:32,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(64,158,255,0.3)'},{offset:1,color:'#409eff'}])}},{name:'最低价',type:'bar',data:d.map(r=>r.min_price),barMaxWidth:32,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(103,194,58,0.3)'},{offset:1,color:'#67c23a'}])}},{name:'最高价',type:'bar',data:d.map(r=>r.max_price),barMaxWidth:32,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(245,108,108,0.3)'},{offset:1,color:'#f56c6c'}])}}]},true);}
+// ====== 大数据分析引擎 ======
+async function loadSparkModelMetrics(){try{const d=await fetchJSON('/analysis/model-info');const m=d.model||{};const el=id=>document.getElementById(id);if(m.rmse!==null&&m.rmse!==undefined){animateNum(el('sm-rmse'),m.rmse.toFixed(4));}else{el('sm-rmse').textContent='N/A';}if(m.r2!==null&&m.r2!==undefined){animateNum(el('sm-r2'),m.r2.toFixed(4));}else{el('sm-r2').textContent='N/A';}if(m.mae!==null&&m.mae!==undefined){animateNum(el('sm-mae'),m.mae.toFixed(4));}else{el('sm-mae').textContent='N/A';}el('sm-trees').textContent=m.numTrees||50;el('sm-features').textContent=m.featureCount||11;if(m.has_spark_env){el('sm-engine').textContent='Spark';el('sm-engine-sub').textContent='MLlib 分布式';}else{el('sm-engine').textContent='Pandas';el('sm-engine-sub').textContent='EMA 降级方案';}}catch(e){console.error('模型指标加载失败:',e);}}
+async function loadFeatureImportance(chart){const d=await fetchJSON('/analysis/model-info');const fi=d.model.feature_importance||[];const names=fi.map(f=>f.feature);const vals=fi.map(f=>f.importance);chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'},formatter:p=>'<b>'+p[0].axisValue+'</b><br/>重要性: <b>'+(p[0].value*100).toFixed(2)+'%</b>'},grid:{left:100,right:50,top:8,bottom:20},xAxis:{type:'value',axisLabel:{color:'#5a6a8a',fontSize:10,formatter:v=>(v*100).toFixed(0)+'%'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},yAxis:{type:'category',data:[...names].reverse(),axisLabel:{color:'#a0b0cc',fontSize:11},axisLine:{show:false},axisTick:{show:false}},series:[{type:'bar',data:[...vals].reverse(),barMaxWidth:18,itemStyle:{borderRadius:[0,8,8,0],color:function(p){const colors=['#409eff','#67c23a','#e6a23c','#f56c6c','#9b59b6','#00d2d3','#ff6b6b','#48dbfb','#feca57','#54a0ff','#1abc9c'];return colors[(names.length-1-p.dataIndex)%colors.length];}},label:{show:true,position:'right',color:'#8899bb',fontSize:10,formatter:p=>(p.value*100).toFixed(1)+'%'}}]});}
+async function loadWindowCompare(chart){const d=await fetchJSON('/analysis/model-info');const ws=d.model.windows||[];if(!ws.length){chart.setOption({title:{text:'暂无预测数据',left:'center',top:'center',textStyle:{color:'#6a7a9a'}}});return;}const labels=ws.map(w=>w.window+'天');const avgs=ws.map(w=>w.avg_predicted);const counts=ws.map(w=>w.count);chart.setOption({tooltip:{trigger:'axis',backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'},formatter:function(p){let t='<b>'+p[0].axisValue+'</b><br/>';p.forEach(s=>{t+=s.marker+' '+s.seriesName+': <b>'+(s.seriesName==='平均预测价'?'¥':'')+s.value+'</b><br/>';});return t;}},legend:{data:['平均预测价','预测品种数'],textStyle:{color:'#8899bb',fontSize:11},top:0},grid:{left:55,right:55,top:40,bottom:30},xAxis:{type:'category',data:labels,axisLabel:{color:'#8899bb',fontSize:11},axisLine:{lineStyle:{color:'rgba(64,158,255,0.15)'}},axisTick:{show:false}},yAxis:[{type:'value',name:'元/斤',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{lineStyle:{color:'rgba(64,158,255,0.06)'}}},{type:'value',name:'品种数',axisLabel:{color:'#5a6a8a'},nameTextStyle:{color:'#5a6a8a'},splitLine:{show:false}}],series:[{name:'平均预测价',type:'bar',data:avgs,barMaxWidth:36,itemStyle:{borderRadius:[6,6,0,0],color:new echarts.graphic.LinearGradient(0,1,0,0,[{offset:0,color:'rgba(0,210,211,0.3)'},{offset:1,color:'#00d2d3'}])},label:{show:true,position:'top',color:'#8899bb',fontSize:10,formatter:'¥{c}'}},{name:'预测品种数',type:'line',yAxisIndex:1,data:counts,lineStyle:{color:'#e6a23c',width:2.5},itemStyle:{color:'#e6a23c'},symbol:'circle',symbolSize:10}]});}
+async function loadBigdataArch(){const wrap=document.getElementById('bigdata-arch-panel');if(!wrap)return;wrap.innerHTML='<div style="color:#4a5a7a;padding:20px;text-align:center;">加载中...</div>';try{const d=await fetchJSON('/analysis/bigdata-pipeline');const ts=d.tech_stack||[];let h='<div style="padding:8px 12px;">';
+// Architecture flow diagram
+h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap;">';
+const layers=[{name:'数据采集',icon:'🕷️',color:'#409eff'},{name:'数据清洗',icon:'🧹',color:'#67c23a'},{name:'HDFS 存储',icon:'💾',color:'#e6a23c'},{name:'Hive 数仓',icon:'🏛️',color:'#9b59b6'},{name:'Spark 分析',icon:'⚡',color:'#f56c6c'},{name:'Web 展示',icon:'📊',color:'#00d2d3'}];
+layers.forEach((l,i)=>{if(i>0)h+='<span style="color:#4a5a7a;font-size:18px;">→</span>';h+=`<span style="background:rgba(${hexToRgb(l.color)},0.15);border:1px solid rgba(${hexToRgb(l.color)},0.3);border-radius:8px;padding:6px 12px;font-size:11px;color:${l.color};font-weight:600;white-space:nowrap;">${l.icon} ${l.name}</span>`;});
+h+='</div>';
+// Tech stack table
+h+='<table class="data-table" style="font-size:11px;"><thead><tr><th>技术组件</th><th>版本</th><th>角色</th><th>说明</th></tr></thead><tbody>';
+ts.forEach(t=>{h+=`<tr><td><b style="color:#409eff">${t.name}</b></td><td><span style="background:rgba(64,158,255,0.1);padding:1px 6px;border-radius:3px;font-size:10px;">${t.version}</span></td><td style="color:#e6a23c;font-weight:600;">${t.role}</td><td style="color:#8899bb;">${t.desc}</td></tr>`;});
+h+='</tbody></table>';
+// HDFS info
+const hdfs=d.hdfs||{};
+h+='<div style="margin-top:12px;padding:10px;background:rgba(230,162,60,0.08);border:1px solid rgba(230,162,60,0.2);border-radius:8px;">';
+h+='<div style="font-size:12px;color:#e6a23c;font-weight:600;margin-bottom:6px;">📁 HDFS 存储路径</div>';
+h+='<div style="font-size:11px;color:#8899bb;font-family:monospace;">'+hdfs.base_path+'</div>';
+(hdfs.directories||[]).forEach(dir=>{h+=`<div style="font-size:11px;color:#6a7a9a;margin-top:4px;"><span style="color:#409eff">${dir.path}</span> — ${dir.desc}</div>`;});
+h+='</div></div>';
+wrap.innerHTML=h;}catch(e){wrap.innerHTML='<div style="color:#f56c6c;padding:12px;">加载失败</div>';}}
+function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16);const g=parseInt(hex.slice(3,5),16);const b=parseInt(hex.slice(5,7),16);return r+','+g+','+b;}
+async function loadHiveWarehouse(){const wrap=document.getElementById('hive-warehouse-panel');if(!wrap)return;wrap.innerHTML='<div style="color:#4a5a7a;padding:20px;text-align:center;">加载中...</div>';try{const d=await fetchJSON('/analysis/bigdata-pipeline');const layers=d.hive_layers||[];let h='<div style="padding:8px 12px;">';
+const layerColors={'ODS':'#409eff','DWD':'#67c23a','DWS':'#e6a23c','ADS':'#f56c6c'};
+layers.forEach((layer,li)=>{const key=layer.layer.split('（')[0];const color=layerColors[key]||'#409eff';
+h+=`<div style="margin-bottom:12px;border-left:3px solid ${color};padding-left:12px;">`;
+h+=`<div style="font-size:12px;color:${color};font-weight:700;margin-bottom:4px;">${layer.layer}</div>`;
+h+=`<div style="font-size:11px;color:#6a7a9a;margin-bottom:6px;">${layer.desc}</div>`;
+h+='<table class="data-table" style="font-size:10px;"><thead><tr><th>表名</th><th>说明</th><th>分区</th><th>格式</th></tr></thead><tbody>';
+(layer.tables||[]).forEach(t=>{h+=`<tr><td style="color:#409eff;font-family:monospace;font-weight:600;">${t.name}</td><td style="color:#a0b0cc;">${t.desc}</td><td style="color:#e6a23c;">${t.partition}</td><td><span style="background:rgba(103,194,58,0.1);color:#67c23a;padding:1px 4px;border-radius:3px;font-size:9px;">${t.format}</span></td></tr>`;});
+h+='</tbody></table></div>';});
+h+='</div>';wrap.innerHTML=h;}catch(e){wrap.innerHTML='<div style="color:#f56c6c;padding:12px;">加载失败</div>';}}
+async function loadSparkVsPandas(){const wrap=document.getElementById('spark-vs-pandas-panel');if(!wrap)return;wrap.innerHTML='<div style="color:#4a5a7a;padding:20px;text-align:center;">加载中...</div>';try{const d=await fetchJSON('/analysis/model-info');const c=d.comparison||{};const s=c.spark||{};const p=c.pandas||{};
+let h='<div style="padding:8px 12px;">';
+h+='<table class="compare-table" style="font-size:11px;"><thead><tr><th style="width:20%">对比维度</th><th style="text-align:center;color:#f56c6c">⚡ '+s.name+'</th><th style="text-align:center;color:#e6a23c">📊 '+p.name+'</th></tr></thead><tbody>';
+h+=`<tr><td><b>算法</b></td><td style="text-align:center;color:#a0b0cc;">${s.algorithm}</td><td style="text-align:center;color:#a0b0cc;">${p.algorithm}</td></tr>`;
+h+=`<tr><td><b>特征数</b></td><td class="num-cell" style="text-align:center;">${s.features}</td><td class="num-cell" style="text-align:center;">${p.features}</td></tr>`;
+h+=`<tr><td><b>决策树</b></td><td class="num-cell" style="text-align:center;">${s.trees} 棵</td><td class="num-cell" style="text-align:center;">N/A</td></tr>`;
+h+=`<tr><td><b>分布式计算</b></td><td style="text-align:center;"><span style="color:#67c23a;font-weight:700;">✔ 支持</span></td><td style="text-align:center;"><span style="color:#f56c6c;font-weight:700;">✘ 单机</span></td></tr>`;
+h+=`<tr><td><b>计算引擎</b></td><td style="text-align:center;color:#409eff;font-weight:600;">${s.engine}</td><td style="text-align:center;color:#e6a23c;font-weight:600;">${p.engine}</td></tr>`;
+const rmse=s.rmse!==null&&s.rmse!==undefined?s.rmse.toFixed(4):'N/A';
+const r2=s.r2!==null&&s.r2!==undefined?s.r2.toFixed(4):'N/A';
+h+=`<tr><td><b>RMSE</b></td><td class="num-cell" style="text-align:center;">${rmse}</td><td style="text-align:center;color:#6a7a9a;">N/A</td></tr>`;
+h+=`<tr><td><b>R²</b></td><td class="num-cell" style="text-align:center;">${r2}</td><td style="text-align:center;color:#6a7a9a;">N/A</td></tr>`;
+h+='</tbody></table>';
+// Pipeline steps
+const pipeline=d.model.pipeline||[];
+h+='<div style="margin-top:12px;padding:10px;background:rgba(64,158,255,0.06);border:1px solid rgba(64,158,255,0.15);border-radius:8px;">';
+h+='<div style="font-size:12px;color:#409eff;font-weight:600;margin-bottom:8px;">🔄 模型训练流水线</div>';
+pipeline.forEach((step,i)=>{h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="width:18px;height:18px;border-radius:50%;background:rgba(64,158,255,0.2);color:#409eff;font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;">${i+1}</span><span style="font-size:11px;color:#a0b0cc;">${step}</span></div>`;});
+h+='</div></div>';wrap.innerHTML=h;}catch(e){wrap.innerHTML='<div style="color:#f56c6c;padding:12px;">加载失败</div>';}}
+async function loadSparkPipelineChart(chart){try{const d=await fetchJSON('/analysis/bigdata-pipeline');const steps=d.spark_steps||[];if(!steps.length){chart.setOption({title:{text:'暂无数据',left:'center',top:'center',textStyle:{color:'#6a7a9a'}}});return;}
+const labels=steps.map(s=>s.step+'. '+s.name);const counts=steps.map(s=>s.output.length);
+chart.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'},backgroundColor:'rgba(10,14,38,0.9)',borderColor:'rgba(64,158,255,0.3)',textStyle:{color:'#ccc'},formatter:function(p){const idx=p[0].dataIndex;const step=steps[idx];return '<b>Step '+step.step+': '+step.name+'</b><br/>'+step.desc+'<br/>输出: <b>'+step.output+'</b>';}},grid:{left:100,right:20,top:8,bottom:20},xAxis:{type:'value',show:false},yAxis:{type:'category',data:[...labels].reverse(),axisLabel:{color:'#a0b0cc',fontSize:11,fontWeight:'bold'},axisLine:{show:false},axisTick:{show:false}},series:[{type:'bar',data:[...steps.map(s=>s.step)].reverse(),barMaxWidth:22,itemStyle:{borderRadius:[0,8,8,0],color:function(p){const colors=['#409eff','#67c23a','#e6a23c','#f56c6c','#9b59b6'];return colors[p.dataIndex%colors.length];}},label:{show:true,position:'right',color:'#8899bb',fontSize:10,formatter:function(p){const idx=steps.length-1-p.dataIndex;return steps[idx].output.slice(0,25);}}}]});}
+catch(e){chart.setOption({title:{text:'加载失败',left:'center',top:'center',textStyle:{color:'#f56c6c'}}});}}
+</script>
+</body>
+</html>
+

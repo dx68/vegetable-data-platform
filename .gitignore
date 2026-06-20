@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 大数据导出文件（太大不适合上传 GitHub）
+bigdata/export/*/part-*.csv
+bigdata/export/*/_SUCCESS
+
+# 原始爬取数据（太大）
+data/raw/prices/prices_all.csv
+data/raw/seeds/seeds_all.csv
+data/raw/suppliers/suppliers_all.csv
+
+# 进度文件
+data/raw/*/prices_progress.json
+data/raw/*/seeds_progress.json
+data/raw/*/suppliers_progress.json
+
+# 系统文件
+*.DS_Store
+Thumbs.db
