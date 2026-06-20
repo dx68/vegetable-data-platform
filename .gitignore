@@ -24,6 +24,9 @@ data/raw/prices/prices_all.csv
 data/raw/seeds/seeds_all.csv
 data/raw/suppliers/suppliers_all.csv
 
+# 清洗后数据（太大，可通过 clean_data.py 重新生成）
+data/processed/*.csv
+
 # 进度文件
 data/raw/*/prices_progress.json
 data/raw/*/seeds_progress.json
